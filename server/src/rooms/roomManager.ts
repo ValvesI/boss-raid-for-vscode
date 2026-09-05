@@ -54,6 +54,29 @@ export class RoomManager {
   }
 
     /**
+   * Remove um jogador da raid.
+   * Se ele era o último participante, a sala inteira é removida da memória.
+   */
+  removePlayer(roomCode: string, playerId: string): RaidState | null {
+    const raid = this.getRoom(roomCode);
+
+    if (!raid) {
+      return null;
+    }
+
+    // filter cria uma nova lista sem o jogador cujo id corresponde ao desconectado.
+    raid.players = raid.players.filter((player) => player.id !== playerId);
+
+    // Uma sala vazia não precisa continuar ocupando memória no servidor.
+    if (raid.players.length === 0) {
+      this.rooms.delete(roomCode);
+      return null;
+    }
+
+    return raid;
+  }
+
+    /**
    * Aplica o progresso de código de um jogador à raid indicada.
    * Retorna null se a sala não existir.
    */
