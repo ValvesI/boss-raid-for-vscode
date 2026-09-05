@@ -90,11 +90,18 @@ export class RoomManager {
       return null;
     }
 
-    // A calculadora converte linhas adicionadas/removidas em um número de dano.
-    const damage = calculateDamage(progress);
+    // Um boss já derrotado não recebe mais dano.
+    if (raid.bossHp === 0) {
+      return { raid, damage: 0 };
+    }
 
-    // Math.max evita que o HP fique negativo após o boss ser derrotado.
-    raid.bossHp = Math.max(0, raid.bossHp - damage);
+    // A calculadora informa o dano solicitado pelas linhas alteradas.
+    const requestedDamage = calculateDamage(progress);
+
+    // No golpe final, o dano real não pode ser maior que o HP que restava.
+    const damage = Math.min(requestedDamage, raid.bossHp);
+
+    raid.bossHp -= damage;
 
     return { raid, damage };
   }
