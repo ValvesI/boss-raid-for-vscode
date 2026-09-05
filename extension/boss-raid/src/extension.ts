@@ -1,26 +1,79 @@
-// The module 'vscode' contains the VS Code extensibility API
-// Import the module and reference it with the alias vscode in your code below
-import * as vscode from 'vscode';
+import * as vscode from "vscode";
+import { ChangeTracker } from "./editor/changeTracker";
+import { LocalRaid } from "./raid/localRaid";
 
-// This method is called when your extension is activated
-// Your extension is activated the very first time the command is executed
+const DAMAGE_PER_ATTACK = 100;
+const LINES_PER_ATTACK = 10;
+
 export function activate(context: vscode.ExtensionContext) {
+	const raid = new LocalRaid();
+	let pendingLines = 0;
+	const statusBar = vscode.window.createStatusBarItem(
+    vscode.StatusBarAlignment.Left,
+    100,
+  );
 
-	// Use the console to output diagnostic information (console.log) and errors (console.error)
-	// This line of code will only be executed once when your extension is activated
-	console.log('Congratulations, your extension "boss-raid" is now active!');
+	function updateBossUi() {
+		statusBar.text = `$(flame) Boss: ${raid.currentBossHp} / ${raid.bossMaxHp} HP`;
+    statusBar.tooltip = "Boss Raid";
+    statusBar.show();
+	}
 
-	// The command has been defined in the package.json file
-	// Now provide the implementation of the command with registerCommand
-	// The commandId parameter must match the command field in package.json
-	const disposable = vscode.commands.registerCommand('boss-raid.helloWorld', () => {
-		// The code you place here will be executed every time your command is executed
-		// Display a message box to the user
-		vscode.window.showInformationMessage('Experimento experimental!');
+	function applyDamage(damage: number, message: string) {
+		const result = raid.attack(damage);
+		updateBossUi();
+
+		if (result.damage === 0) {
+			vscode.window.showInformationMessage("O boss já foi derrotado!");
+		} else if (result.isDefeated) {
+			vscode.window.showInformationMessage("Boss derrotado! 🎉");
+		} else {
+			vscode.window.showInformationMessage(message);
+		}
+	}
+
+	const startRaid = vscode.commands.registerCommand("boss-raid.start", () => {
+		raid.start();
+		pendingLines = 0;
+    updateBossUi();
+    vscode.window.showInformationMessage("A raid local começou!");
+  });
+
+	const attackBoss = vscode.commands.registerCommand("boss-raid.attack", () => {
+		applyDamage(DAMAGE_PER_ATTACK, `Você causou ${DAMAGE_PER_ATTACK} de dano.`);
+  });
+
+	const resetBoss = vscode.commands.registerCommand("boss-raid.reset", () => {
+		raid.start();
+		pendingLines = 0;
+    updateBossUi();
+    vscode.window.showInformationMessage("Boss reiniciado.");
 	});
 
-	context.subscriptions.push(disposable);
+	const changeTracker = new ChangeTracker();
+	const trackerDisposable = changeTracker.start((linesAdded) => {
+		if (raid.isDefeated) {
+			return;
+		}
+
+		pendingLines += linesAdded;
+		while (pendingLines >= LINES_PER_ATTACK && !raid.isDefeated) {
+			pendingLines -= LINES_PER_ATTACK;
+			applyDamage(
+				DAMAGE_PER_ATTACK,
+				`${LINES_PER_ATTACK} linhas escritas: ${DAMAGE_PER_ATTACK} de dano!`,
+			);
+		}
+	});
+
+	updateBossUi();
+	context.subscriptions.push(
+		statusBar,
+		startRaid,
+		attackBoss,
+		resetBoss,
+		trackerDisposable,
+	);
 }
 
-// This method is called when your extension is deactivated
 export function deactivate() {}
