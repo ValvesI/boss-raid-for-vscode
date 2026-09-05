@@ -1,7 +1,16 @@
 // "import type" traz somente definições do TypeScript; não gera código no servidor.
 import type { Player, RaidState } from "../../../shared/protocol.js";
+import {
+  calculateDamage,
+  type CodeProgress,
+} from "../raids/damageCalculator.js";
 
 const BOSS_MAX_HP = 1_000;
+// Resultado devolvido depois que um evento de progresso afeta o boss.
+export type DamageResult = {
+  raid: RaidState;
+  damage: number;
+};
 
 // Esta classe concentra as regras de armazenamento e busca de salas.
 export class RoomManager {
@@ -42,6 +51,29 @@ export class RoomManager {
   getRoom(roomCode: string): RaidState | null {
     // "?? null" converte o undefined do Map em null, nosso sinal de "não encontrada".
     return this.rooms.get(roomCode) ?? null;
+  }
+
+    /**
+   * Aplica o progresso de código de um jogador à raid indicada.
+   * Retorna null se a sala não existir.
+   */
+  applyCodeProgress(
+    roomCode: string,
+    progress: CodeProgress,
+  ): DamageResult | null {
+    const raid = this.getRoom(roomCode);
+
+    if (!raid) {
+      return null;
+    }
+
+    // A calculadora converte linhas adicionadas/removidas em um número de dano.
+    const damage = calculateDamage(progress);
+
+    // Math.max evita que o HP fique negativo após o boss ser derrotado.
+    raid.bossHp = Math.max(0, raid.bossHp - damage);
+
+    return { raid, damage };
   }
 
   private generateRoomCode(): string {
