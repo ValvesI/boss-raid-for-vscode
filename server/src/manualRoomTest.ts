@@ -1,43 +1,66 @@
-// Este arquivo não é a extensão: ele cria dois clientes falsos para testar o servidor.
+// Este arquivo simula duas extensões para testar a raid sem abrir o VS Code.
 import { io } from "socket.io-client";
 import type { RaidState } from "../../shared/protocol.js";
 
 const SERVER_URL = "http://localhost:3000";
 
-// autoConnect: false nos dá controle sobre o momento em que cada jogador conecta.
+type DamageAppliedEvent = {
+  playerId: string;
+  damage: number;
+  bossHp: number;
+};
+
+// autoConnect: false permite conectar Ana e Bruno em momentos diferentes.
 const host = io(SERVER_URL, { autoConnect: false });
 const guest = io(SERVER_URL, { autoConnect: false });
 
-// O código só existe depois que Ana cria a sala; por isso ele pode ser undefined no início.
 let roomCode: string | undefined;
+let hostReceivedDamage = false;
+let guestReceivedDamage = false;
+let progressSent = false;
 
-// Ao conectar, Ana envia o evento que o servidor escuta em index.ts.
+/**
+ * O teste só é concluído quando os dois jogadores receberam o mesmo evento de dano.
+ * Isso prova que a sincronização foi enviada para a sala inteira.
+ */
+function finishTestIfReady(): void {
+  if (!hostReceivedDamage || !guestReceivedDamage) {
+    return;
+  }
+
+  console.log("Teste concluído: os dois jogadores receberam o dano.");
+  host.disconnect();
+  guest.disconnect();
+}
+
 host.on("connect", () => {
   console.log("Ana conectou e vai criar uma raid.");
   host.emit("CREATE_RAID", { playerName: "Ana" });
 });
 
-// Ana recebe uma vez a sala com 1 jogador e outra após Bruno entrar.
 host.on("RAID_STATE", ({ raid }: { raid: RaidState }) => {
   console.log(
     `Ana recebeu a raid ${raid.roomCode} com ${raid.players.length} jogador(es).`,
   );
 
+  // Na primeira atualização, somente Ana está na sala.
   if (raid.players.length === 1) {
     roomCode = raid.roomCode;
-    // Bruno só conecta após termos o código correto da sala.
     guest.connect();
     return;
   }
 
+  // Quando Bruno entra, Ana envia progresso: 10 linhas x 4 de dano = 40 de dano.
   if (raid.players.length === 2) {
-    console.log("Teste concluído: os dois jogadores estão na mesma raid.");
-    host.disconnect();
-    guest.disconnect();
+    progressSent = true;
+    console.log("Ana enviou 10 linhas adicionadas para atacar o boss.");
+    host.emit("CODE_PROGRESS", {
+      linesAdded: 10,
+      linesRemoved: 0,
+    });
   }
 });
 
-// Quando Bruno conecta, ele usa o código guardado para entrar na raid de Ana.
 guest.on("connect", () => {
   if (!roomCode) {
     console.error("Não foi possível entrar: código da sala ausente.");
@@ -51,10 +74,22 @@ guest.on("connect", () => {
   });
 });
 
-guest.on("RAID_STATE", ({ raid }: { raid: RaidState }) => {
+host.on("DAMAGE_APPLIED", (event: DamageAppliedEvent) => {
   console.log(
-    `Bruno recebeu a raid ${raid.roomCode} com ${raid.players.length} jogador(es).`,
+    `Ana viu ${event.damage} de dano. HP restante: ${event.bossHp}.`,
   );
+
+  hostReceivedDamage = true;
+  finishTestIfReady();
+});
+
+guest.on("DAMAGE_APPLIED", (event: DamageAppliedEvent) => {
+  console.log(
+    `Bruno viu ${event.damage} de dano. HP restante: ${event.bossHp}.`,
+  );
+
+  guestReceivedDamage = true;
+  finishTestIfReady();
 });
 
 host.on("ERROR", ({ message }: { message: string }) => {
@@ -65,5 +100,5 @@ guest.on("ERROR", ({ message }: { message: string }) => {
   console.error(`Erro recebido por Bruno: ${message}`);
 });
 
-// Inicia o fluxo do teste conectando o primeiro jogador.
+// Inicia o fluxo do teste conectando Ana.
 host.connect();

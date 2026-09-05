@@ -52,42 +52,91 @@ io.on("connection", (socket) => {
 
     // Entrar no grupo permite enviar mensagens somente aos participantes da raid.
     socket.join(raid.roomCode);
+    // Guardamos a sala na própria conexão para não confiar em um código enviado a cada dano.
+    socket.data.roomCode = raid.roomCode;
     socket.emit("RAID_STATE", { raid });
 
     console.log(`${player.name} criou a sala ${raid.roomCode}`);
   });
 
   // Outro jogador usa o código da sala para participar da mesma raid.
-  socket.on(
-    "JOIN_RAID",
-    (data: { roomCode: string; playerName: string }) => {
-      const roomCode = data.roomCode.trim().toUpperCase();
-      const playerName = data.playerName.trim();
+  socket.on("JOIN_RAID", (data: { roomCode: string; playerName: string }) => {
+    const roomCode = data.roomCode.trim().toUpperCase();
+    const playerName = data.playerName.trim();
 
-      if (!playerName || !roomCode) {
+    if (!playerName || !roomCode) {
+      socket.emit("ERROR", {
+        message: "O código da sala e o nome são obrigatórios.",
+      });
+      return;
+    }
+
+    const player: Player = {
+      id: socket.id,
+      name: playerName,
+    };
+
+    const raid = roomManager.joinRoom(roomCode, player);
+
+    if (!raid) {
+      socket.emit("ERROR", { message: "Sala não encontrada." });
+      return;
+    }
+
+    socket.join(roomCode);
+    // A partir daqui, esta conexão está associada à raid informada.
+    socket.data.roomCode = roomCode;
+    // Envia o estado atualizado para todos do grupo, inclusive quem acabou de entrar.
+    io.to(roomCode).emit("RAID_STATE", { raid });
+
+    console.log(`${player.name} entrou na sala ${roomCode}`);
+  });
+
+  // A extensão envia este evento sempre que detectar alterações válidas de código.
+  socket.on(
+    "CODE_PROGRESS",
+    (data: { linesAdded: number; linesRemoved: number }) => {
+      // A sala vem da sessão atual, não da mensagem. Isso reduz erros e abusos.
+      const roomCode = socket.data.roomCode as string | undefined;
+
+      if (!roomCode) {
         socket.emit("ERROR", {
-          message: "O código da sala e o nome são obrigatórios.",
+          message: "Entre em uma raid antes de enviar progresso.",
         });
         return;
       }
 
-      const player: Player = {
-        id: socket.id,
-        name: playerName,
-      };
-
-      const raid = roomManager.joinRoom(roomCode, player);
-
-      if (!raid) {
-        socket.emit("ERROR", { message: "Sala não encontrada." });
+      // Mesmo com TypeScript, mensagens pela rede precisam ser validadas em tempo real.
+      if (
+        !Number.isFinite(data.linesAdded) ||
+        !Number.isFinite(data.linesRemoved)
+      ) {
+        socket.emit("ERROR", {
+          message: "O progresso enviado é inválido.",
+        });
         return;
       }
 
-      socket.join(roomCode);
-      // Envia o estado atualizado para todos do grupo, inclusive quem acabou de entrar.
-      io.to(roomCode).emit("RAID_STATE", { raid });
+      const result = roomManager.applyCodeProgress(roomCode, data);
 
-      console.log(`${player.name} entrou na sala ${roomCode}`);
+      if (!result) {
+        socket.emit("ERROR", { message: "Raid não encontrada." });
+        return;
+      }
+
+      // Informa a todos da sala qual jogador causou o dano e qual é o HP atual.
+      io.to(roomCode).emit("DAMAGE_APPLIED", {
+        playerId: socket.id,
+        damage: result.damage,
+        bossHp: result.raid.bossHp,
+      });
+
+      // Envia também o estado completo para manter todos sincronizados.
+      io.to(roomCode).emit("RAID_STATE", { raid: result.raid });
+
+      console.log(
+        `${socket.id} causou ${result.damage} de dano na sala ${roomCode}.`,
+      );
     },
   );
 
