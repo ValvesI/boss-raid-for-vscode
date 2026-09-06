@@ -5,7 +5,7 @@ import { createServer } from "node:http";
 import process from "node:process";
 import { Server } from "socket.io";
 import { RoomManager } from "./rooms/roomManager.js";
-import type { Player } from "../../shared/protocol.js";
+import type { RaidSettings } from "../../shared/protocol.js";
 
 // Uma aplicação Express é a base das rotas HTTP, como /health.
 const app = express();
@@ -35,7 +35,7 @@ io.on("connection", (socket) => {
   console.log(`Jogador conectado: ${socket.id}`);
 
   // "socket.on" registra uma reação a uma mensagem enviada por este jogador.
-  socket.on("CREATE_RAID", (data: { playerName: string }) => {
+  socket.on("CREATE_RAID", (data: { playerName: string; settings?: RaidSettings }) => {
     // trim remove espaços antes e depois do nome recebido.
     const playerName = data.playerName.trim();
 
@@ -45,12 +45,18 @@ io.on("connection", (socket) => {
     }
 
     // socket.id identifica esta conexão de forma única durante a sessão.
-    const player: Player = {
+    const settings = validateSettings(data.settings);
+    if (!settings) {
+      socket.emit("ERROR", { message: "A vida do boss e o dano por jogador devem ser números inteiros positivos." });
+      return;
+    }
+
+    const player = {
       id: socket.id,
       name: playerName,
     };
 
-    const raid = roomManager.createRoom(player);
+    const raid = roomManager.createRoom(player, settings);
 
     // Entrar no grupo permite enviar mensagens somente aos participantes da raid.
     socket.join(raid.roomCode);
@@ -73,7 +79,7 @@ io.on("connection", (socket) => {
       return;
     }
 
-    const player: Player = {
+    const player = {
       id: socket.id,
       name: playerName,
     };
@@ -124,7 +130,7 @@ io.on("connection", (socket) => {
         return;
       }
 
-      const result = roomManager.applyCodeProgress(roomCode, data);
+      const result = roomManager.applyCodeProgress(roomCode, socket.id, data);
 
       if (!result) {
         socket.emit("ERROR", { message: "Raid não encontrada." });
@@ -157,6 +163,32 @@ io.on("connection", (socket) => {
     },
   );
 
+  // Concluir é um atalho honesto: o servidor concede apenas o dano que ainda falta ao jogador.
+  socket.on("MARK_COMPLETED", () => {
+    const roomCode = socket.data.roomCode as string | undefined;
+    if (!roomCode) {
+      socket.emit("ERROR", { message: "Entre em uma raid antes de concluí-la." });
+      return;
+    }
+
+    const result = roomManager.markPlayerCompleted(roomCode, socket.id);
+    if (!result) {
+      socket.emit("ERROR", { message: "Raid ou jogador não encontrado." });
+      return;
+    }
+
+    io.to(roomCode).emit("DAMAGE_APPLIED", {
+      playerId: socket.id,
+      damage: result.damage,
+      bossHp: result.raid.bossHp,
+    });
+    io.to(roomCode).emit("RAID_STATE", { raid: result.raid });
+
+    if (result.bossDefeated) {
+      io.to(roomCode).emit("BOSS_DEFEATED", { roomCode, defeatedBy: socket.id });
+    }
+  });
+
     socket.on("disconnect", () => {
     // O código foi guardado quando o jogador criou ou entrou na sala.
     const roomCode = socket.data.roomCode as string | undefined;
@@ -183,3 +215,14 @@ io.on("connection", (socket) => {
 httpServer.listen(PORT, "0.0.0.0", () => {
   console.log(`Servidor da raid ativo em http://localhost:${PORT}`);
 });
+
+/** Aceita números seguros para impedir que uma configuração malformada afete a sala. */
+function validateSettings(settings?: RaidSettings): RaidSettings | null {
+  const bossMaxHp = settings?.bossMaxHp ?? 1_000;
+  const damagePerPlayer = settings?.damagePerPlayer ?? 500;
+  const isValid = (value: number) => Number.isInteger(value) && value > 0 && value <= 1_000_000;
+
+  return isValid(bossMaxHp) && isValid(damagePerPlayer)
+    ? { bossMaxHp, damagePerPlayer }
+    : null;
+}

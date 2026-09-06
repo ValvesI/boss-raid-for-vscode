@@ -5,12 +5,20 @@ import { io, type Socket } from "socket.io-client";
 export type Player = {
 	id: string;
 	name: string;
+	damageDealt: number;
+	isCompleted: boolean;
+};
+
+export type RaidSettings = {
+	bossMaxHp: number;
+	damagePerPlayer: number;
 };
 
 export type RaidState = {
 	roomCode: string;
 	bossHp: number;
 	bossMaxHp: number;
+	damagePerPlayer: number;
 	players: Player[];
 };
 
@@ -37,6 +45,9 @@ export type RaidClientHandlers = {
 /** Handles the Socket.IO protocol used by the VS Code extension and the raid server. */
 export class RaidClient {
 	private readonly socket: Socket;
+	// Estes dados permitem entrar novamente na sala depois de uma reconexão.
+	private activeSession: { playerName: string; roomCode: string } | undefined;
+	private hasConnectedBefore = false;
 
 	public constructor(serverUrl: string, private readonly handlers: RaidClientHandlers) {
 		// autoConnect lets the extension wait until a user creates or joins a raid.
@@ -44,11 +55,14 @@ export class RaidClient {
 		this.registerServerEvents();
 	}
 
-	public createRaid(playerName: string): void {
-		this.emitWhenConnected("CREATE_RAID", { playerName });
+	public createRaid(playerName: string, settings: RaidSettings): void {
+		// Criar uma nova sala substitui uma possível sala anterior.
+		this.activeSession = undefined;
+		this.emitWhenConnected("CREATE_RAID", { playerName, settings });
 	}
 
 	public joinRaid(roomCode: string, playerName: string): void {
+		this.activeSession = { playerName, roomCode };
 		this.emitWhenConnected("JOIN_RAID", { roomCode, playerName });
 	}
 
@@ -62,6 +76,11 @@ export class RaidClient {
 			linesAdded,
 			linesRemoved,
 		});
+	}
+
+	/** Pede ao servidor para aplicar somente o dano que ainda falta a este jogador. */
+	public markCompleted(): void {
+		this.emitWhenConnected("MARK_COMPLETED", {});
 	}
 
 	public dispose(): void {
@@ -83,10 +102,24 @@ export class RaidClient {
 	}
 
 	private registerServerEvents(): void {
-		this.socket.on("connect", () => this.handlers.onConnectionChanged(true));
+		this.socket.on("connect", () => {
+			const isReconnect = this.hasConnectedBefore;
+			this.hasConnectedBefore = true;
+			this.handlers.onConnectionChanged(true);
+
+			// Após uma queda, o Socket.IO recebe outro id. O servidor então precisa
+			// associar a nova conexão à sala anterior novamente.
+			if (isReconnect && this.activeSession) {
+				this.socket.emit("JOIN_RAID", this.activeSession);
+			}
+		});
 		this.socket.on("disconnect", () => this.handlers.onConnectionChanged(false));
 
 		this.socket.on("RAID_STATE", ({ raid }: { raid: RaidState }) => {
+			const me = raid.players.find((player) => player.id === this.socket.id);
+			if (me) {
+				this.activeSession = { playerName: me.name, roomCode: raid.roomCode };
+			}
 			this.handlers.onRaidState(raid);
 		});
 

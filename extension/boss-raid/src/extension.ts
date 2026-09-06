@@ -1,6 +1,7 @@
 import * as vscode from "vscode";
 import { ChangeTracker } from "./editor/changeTracker";
-import { RaidClient, type RaidState } from "./multiplayer/raidClient";
+import { RaidClient, type RaidSettings, type RaidState } from "./multiplayer/raidClient";
+import { RaidViewProvider } from "./ui/raidViewProvider";
 
 const LINES_PER_ATTACK = 10;
 const CHARACTERS_PER_DAMAGE = 5;
@@ -10,6 +11,7 @@ export function activate(context: vscode.ExtensionContext) {
 	let pendingCharacters = 0;
 	let currentRaid: RaidState | undefined;
 	let isConnected = false;
+	let raidViewProvider: RaidViewProvider;
 	const statusBar = vscode.window.createStatusBarItem(
     vscode.StatusBarAlignment.Left,
     100,
@@ -28,13 +30,19 @@ export function activate(context: vscode.ExtensionContext) {
 		}
 
 		statusBar.show();
+		raidViewProvider?.update({
+			isConnected,
+			pendingCharacters,
+			pendingLines,
+			raid: currentRaid,
+		});
 	}
 
 	const serverUrl = vscode.workspace
 		.getConfiguration("bossRaid")
-		.get<string>("serverUrl", "http://localhost:3000");
+		.get<string>("serverUrl", "https://boss-raid-for-vscode.onrender.com");
 
-	// The server is authoritative: this extension only displays state it receives.
+	// O servidor é a fonte da verdade: a extensão apenas mostra o estado recebido.
 	const raidClient = new RaidClient(serverUrl, {
 		onConnectionChanged: (connected) => {
 			isConnected = connected;
@@ -61,35 +69,61 @@ export function activate(context: vscode.ExtensionContext) {
 		});
 	}
 
-	const startRaid = vscode.commands.registerCommand("boss-raid.start", async () => {
-		const playerName = await askForPlayerName();
-		if (!playerName?.trim()) {
+	function createRaid(playerName: string, settings: RaidSettings) {
+		if (!playerName.trim()) {
+			vscode.window.showWarningMessage("Digite seu nome para criar a raid.");
 			return;
 		}
 
 		pendingLines = 0;
 		pendingCharacters = 0;
-		raidClient.createRaid(playerName.trim());
-	});
+		raidClient.createRaid(playerName.trim(), settings);
+		updateBossUi();
+	}
 
-	const joinRaid = vscode.commands.registerCommand("boss-raid.join", async () => {
-		const playerName = await askForPlayerName();
-		if (!playerName?.trim()) {
-			return;
-		}
-
-		const roomCode = await vscode.window.showInputBox({
-			prompt: "Digite o código da raid",
-			placeHolder: "Ex.: 85WZXH",
-			ignoreFocusOut: true,
-		});
-		if (!roomCode?.trim()) {
+	function joinRaidByCode(playerName: string, roomCode: string) {
+		if (!playerName.trim() || !roomCode.trim()) {
+			vscode.window.showWarningMessage("Digite seu nome e o código da raid.");
 			return;
 		}
 
 		pendingLines = 0;
 		pendingCharacters = 0;
 		raidClient.joinRaid(roomCode.trim().toUpperCase(), playerName.trim());
+		updateBossUi();
+	}
+
+	// A barra lateral é a interface principal; os comandos continuam como atalho opcional.
+	raidViewProvider = new RaidViewProvider(createRaid, joinRaidByCode, () => {
+		if (!currentRaid) {
+			vscode.window.showWarningMessage("Crie ou entre em uma raid primeiro.");
+			return;
+		}
+		raidClient.markCompleted();
+	});
+	const raidViewRegistration = vscode.window.registerWebviewViewProvider(
+		RaidViewProvider.viewType,
+		raidViewProvider,
+		// Mantém a página viva ao alternar para o Explorer ou outro painel do VS Code.
+		{ webviewOptions: { retainContextWhenHidden: true } },
+	);
+
+	const startRaid = vscode.commands.registerCommand("boss-raid.start", async () => {
+		const playerName = await askForPlayerName();
+		if (playerName) {
+			createRaid(playerName, { bossMaxHp: 1_000, damagePerPlayer: 500 });
+		}
+	});
+
+	const joinRaid = vscode.commands.registerCommand("boss-raid.join", async () => {
+		const playerName = await askForPlayerName();
+		if (!playerName) {
+			return;
+		}
+		const roomCode = await vscode.window.showInputBox({ prompt: "Digite o código da raid", placeHolder: "Ex.: 85WZXH" });
+		if (roomCode) {
+			joinRaidByCode(playerName, roomCode);
+		}
 	});
 
 	const attackBoss = vscode.commands.registerCommand("boss-raid.attack", () => {
@@ -129,12 +163,17 @@ export function activate(context: vscode.ExtensionContext) {
 	});
 
 	updateBossUi();
+	if (!context.globalState.get<boolean>("bossRaid.dashboardWasShown")) {
+		void vscode.commands.executeCommand("workbench.view.extension.bossRaid");
+		void context.globalState.update("bossRaid.dashboardWasShown", true);
+	}
 	context.subscriptions.push(
 		statusBar,
 		startRaid,
 		joinRaid,
 		attackBoss,
 		trackerDisposable,
+		raidViewRegistration,
 		{ dispose: () => raidClient.dispose() },
 	);
 }

@@ -38,7 +38,11 @@ function attackBoss(): void {
 
 socket.on("connect", () => {
   console.log("Jogador conectou e vai criar uma raid.");
-  socket.emit("CREATE_RAID", { playerName: "Testador" });
+  // Este teste é solo, então seu limite individual precisa cobrir a vida toda do boss.
+  socket.emit("CREATE_RAID", {
+    playerName: "Testador",
+    settings: { bossMaxHp: 1_000, damagePerPlayer: 1_000 },
+  });
 });
 
 socket.on("RAID_STATE", ({ raid }: RaidStateEvent) => {
