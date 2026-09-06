@@ -134,14 +134,41 @@ io.on("connection", (socket) => {
       // Envia também o estado completo para manter todos sincronizados.
       io.to(roomCode).emit("RAID_STATE", { raid: result.raid });
 
+        // Este evento acontece uma única vez: no golpe que derrota o boss.
+      if (result.bossDefeated) {
+        io.to(roomCode).emit("BOSS_DEFEATED", {
+          roomCode,
+          defeatedBy: socket.id,
+        });
+
+        console.log(`Boss da sala ${roomCode} foi derrotado.`);
+      }
+
       console.log(
         `${socket.id} causou ${result.damage} de dano na sala ${roomCode}.`,
       );
     },
   );
 
-  socket.on("disconnect", () => {
-    console.log(`Jogador desconectado: ${socket.id}`);
+    socket.on("disconnect", () => {
+    // O código foi guardado quando o jogador criou ou entrou na sala.
+    const roomCode = socket.data.roomCode as string | undefined;
+
+    if (!roomCode) {
+      console.log(`Jogador desconectado: ${socket.id}`);
+      return;
+    }
+
+    const raid = roomManager.removePlayer(roomCode, socket.id);
+
+    if (raid) {
+      // Só os jogadores que continuaram conectados recebem o estado atualizado.
+      io.to(roomCode).emit("RAID_STATE", { raid });
+      console.log(`Jogador saiu da sala ${roomCode}: ${socket.id}`);
+      return;
+    }
+
+    console.log(`Sala ${roomCode} foi encerrada porque ficou vazia.`);
   });
 });
 
