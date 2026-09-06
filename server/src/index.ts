@@ -179,6 +179,7 @@ io.on("connection", (socket) => {
   });
 });
 
-httpServer.listen(PORT, () => {
+// 0.0.0.0 accepts the public connection forwarded by Render and local requests.
+httpServer.listen(PORT, "0.0.0.0", () => {
   console.log(`Servidor da raid ativo em http://localhost:${PORT}`);
 });
