@@ -8,13 +8,19 @@ export type Player = {
 
 export type RaidSettings = {
   bossMaxHp: number;
+  /** Ausente significa que a raid não possui cronômetro. */
+  timeLimitSeconds?: number | undefined;
 };
+
+export type RaidOutcome = "active" | "boss-defeated" | "boss-won";
 
 export type RaidState = {
   roomCode: string;
   bossHp: number;
   bossMaxHp: number;
   damagePerPlayer: number;
+  endsAt?: number | undefined;
+  outcome: RaidOutcome;
   players: Player[];
 };
 
@@ -44,4 +50,5 @@ export type ServerMessage =
     roomCode: string;
     defeatedBy: string;
   }
+  | { type: "RAID_LOST"; roomCode: string }
   | { type: "RAID_LEFT" };

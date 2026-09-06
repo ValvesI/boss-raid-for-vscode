@@ -31,6 +31,10 @@ export class RoomManager {
       bossMaxHp: settings.bossMaxHp,
       bossHp: settings.bossMaxHp,
       damagePerPlayer: settings.bossMaxHp,
+      endsAt: settings.timeLimitSeconds
+        ? Date.now() + settings.timeLimitSeconds * 1_000
+        : undefined,
+      outcome: "active",
       players: [{ ...host, damageDealt: 0, isCompleted: false }],
     };
 
@@ -80,6 +84,8 @@ export class RoomManager {
       return null;
     }
 
+    this.updateDamageLimit(raid);
+
     return raid;
   }
 
@@ -99,7 +105,7 @@ export class RoomManager {
     }
 
     // Um boss já derrotado não recebe mais dano.
-    if (raid.bossHp === 0) {
+    if (raid.outcome !== "active") {
       return { raid, damage: 0, bossDefeated: false };
     }
 
@@ -124,6 +130,9 @@ export class RoomManager {
 
     // Só é uma derrota nova quando este ataque levou o HP até zero.
     const bossDefeated = raid.bossHp === 0;
+    if (bossDefeated) {
+      raid.outcome = "boss-defeated";
+    }
 
     return { raid, damage, bossDefeated };
   }
@@ -133,7 +142,7 @@ export class RoomManager {
     const raid = this.getRoom(roomCode);
     const player = raid?.players.find((candidate) => candidate.id === playerId);
 
-    if (!raid || !player || raid.bossHp === 0) {
+    if (!raid || !player || raid.outcome !== "active") {
       return raid ? { raid, damage: 0, bossDefeated: false } : null;
     }
 
@@ -142,8 +151,23 @@ export class RoomManager {
     player.damageDealt += damage;
     player.isCompleted = true;
     raid.bossHp -= damage;
+    const bossDefeated = raid.bossHp === 0;
+    if (bossDefeated) {
+      raid.outcome = "boss-defeated";
+    }
 
-    return { raid, damage, bossDefeated: raid.bossHp === 0 };
+    return { raid, damage, bossDefeated };
+  }
+
+  /** O cronômetro acabou antes da derrota do boss. */
+  markBossWon(roomCode: string): RaidState | null {
+    const raid = this.getRoom(roomCode);
+    if (!raid || raid.outcome !== "active") {
+      return null;
+    }
+
+    raid.outcome = "boss-won";
+    return raid;
   }
 
   private generateRoomCode(): string {
