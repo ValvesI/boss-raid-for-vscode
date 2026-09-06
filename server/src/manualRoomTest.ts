@@ -70,6 +70,7 @@ host.on("RAID_STATE", ({ raid }: { raid: RaidState }) => {
     progressSent = true;
     console.log("Ana enviou 10 linhas adicionadas para atacar o boss.");
     host.emit("CODE_PROGRESS", {
+      charactersAdded: 0,
       linesAdded: 10,
       linesRemoved: 0,
     });

@@ -30,6 +30,7 @@ function attackBoss(): void {
 
   // Cada ataque tem 50 linhas: 50 × 4 = 200 de dano.
   socket.emit("CODE_PROGRESS", {
+    charactersAdded: 0,
     linesAdded: 50,
     linesRemoved: 0,
   });

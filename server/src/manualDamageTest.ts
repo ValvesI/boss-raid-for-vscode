@@ -15,6 +15,7 @@ console.log(`Boss criado com ${raid.bossHp} HP.`);
 // Após quatro ataques, o boss deve ter 200 HP.
 for (let index = 0; index < 4; index += 1) {
   roomManager.applyCodeProgress(raid.roomCode, {
+    charactersAdded: 0,
     linesAdded: 50,
     linesRemoved: 0,
   });
@@ -25,6 +26,7 @@ console.log(`Após quatro ataques, o boss ficou com ${raid.bossHp} HP.`);
 
 // 30 linhas adicionadas causam 120 de dano, deixando o boss com 80 HP.
 roomManager.applyCodeProgress(raid.roomCode, {
+  charactersAdded: 0,
   linesAdded: 30,
   linesRemoved: 0,
 });
@@ -33,6 +35,7 @@ assert.equal(raid.bossHp, 80);
 
 // Este ataque pediria 200 de dano, mas só 80 podem ser aplicados.
 const finalHit = roomManager.applyCodeProgress(raid.roomCode, {
+  charactersAdded: 0,
   linesAdded: 100,
   linesRemoved: 0,
 });
@@ -44,6 +47,7 @@ console.log(`Golpe final aplicou ${finalHit?.damage} de dano. Boss derrotado.`);
 
 // Depois de derrotado, o boss não deve receber dano adicional.
 const extraHit = roomManager.applyCodeProgress(raid.roomCode, {
+  charactersAdded: 0,
   linesAdded: 100,
   linesRemoved: 0,
 });

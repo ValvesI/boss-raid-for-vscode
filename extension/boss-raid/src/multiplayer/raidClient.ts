@@ -52,8 +52,16 @@ export class RaidClient {
 		this.emitWhenConnected("JOIN_RAID", { roomCode, playerName });
 	}
 
-	public sendCodeProgress(linesAdded: number, linesRemoved: number): void {
-		this.emitWhenConnected("CODE_PROGRESS", { linesAdded, linesRemoved });
+	public sendCodeProgress(
+		linesAdded: number,
+		linesRemoved: number,
+		charactersAdded: number,
+	): void {
+		this.emitWhenConnected("CODE_PROGRESS", {
+			charactersAdded,
+			linesAdded,
+			linesRemoved,
+		});
 	}
 
 	public dispose(): void {

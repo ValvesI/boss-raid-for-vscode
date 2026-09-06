@@ -95,7 +95,11 @@ io.on("connection", (socket) => {
   // A extensão envia este evento sempre que detectar alterações válidas de código.
   socket.on(
     "CODE_PROGRESS",
-    (data: { linesAdded: number; linesRemoved: number }) => {
+    (data: {
+      charactersAdded: number;
+      linesAdded: number;
+      linesRemoved: number;
+    }) => {
       // A sala vem da sessão atual, não da mensagem. Isso reduz erros e abusos.
       const roomCode = socket.data.roomCode as string | undefined;
 
@@ -108,6 +112,7 @@ io.on("connection", (socket) => {
 
       // Mesmo com TypeScript, mensagens pela rede precisam ser validadas em tempo real.
       if (
+        !Number.isFinite(data.charactersAdded) ||
         !Number.isFinite(data.linesAdded) ||
         !Number.isFinite(data.linesRemoved)
       ) {

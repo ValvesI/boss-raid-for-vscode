@@ -13,7 +13,12 @@ export type RaidState = {
 export type ClientMessage =
   | { type: "CREATE_RAID"; playerName: string }
   | { type: "JOIN_RAID"; roomCode: string; playerName: string }
-  | { type: "CODE_PROGRESS"; linesAdded: number; linesRemoved: number };
+  | {
+    type: "CODE_PROGRESS";
+    charactersAdded: number;
+    linesAdded: number;
+    linesRemoved: number;
+  };
 
 export type ServerMessage =
   | { type: "RAID_STATE"; raid: RaidState }

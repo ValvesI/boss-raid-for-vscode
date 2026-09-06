@@ -3,9 +3,11 @@ import { ChangeTracker } from "./editor/changeTracker";
 import { RaidClient, type RaidState } from "./multiplayer/raidClient";
 
 const LINES_PER_ATTACK = 10;
+const CHARACTERS_PER_DAMAGE = 5;
 
 export function activate(context: vscode.ExtensionContext) {
 	let pendingLines = 0;
+	let pendingCharacters = 0;
 	let currentRaid: RaidState | undefined;
 	let isConnected = false;
 	const statusBar = vscode.window.createStatusBarItem(
@@ -15,7 +17,7 @@ export function activate(context: vscode.ExtensionContext) {
 
 	function updateBossUi() {
 		if (currentRaid) {
-			statusBar.text = `$(flame) Boss [${currentRaid.roomCode}]: ${currentRaid.bossHp} / ${currentRaid.bossMaxHp} HP | $(person) ${currentRaid.players.length}`;
+			statusBar.text = `$(flame) Boss [${currentRaid.roomCode}]: ${currentRaid.bossHp} / ${currentRaid.bossMaxHp} HP | $(person) ${currentRaid.players.length} | $(edit) ${pendingLines}/${LINES_PER_ATTACK} linhas | $(symbol-string) ${pendingCharacters}/${CHARACTERS_PER_DAMAGE} caracteres`;
 			statusBar.tooltip = `Raid ${currentRaid.roomCode}`;
 		} else if (isConnected) {
 			statusBar.text = "$(radio-tower) Boss Raid: conectado — crie ou entre em uma raid";
@@ -66,6 +68,7 @@ export function activate(context: vscode.ExtensionContext) {
 		}
 
 		pendingLines = 0;
+		pendingCharacters = 0;
 		raidClient.createRaid(playerName.trim());
 	});
 
@@ -85,6 +88,7 @@ export function activate(context: vscode.ExtensionContext) {
 		}
 
 		pendingLines = 0;
+		pendingCharacters = 0;
 		raidClient.joinRaid(roomCode.trim().toUpperCase(), playerName.trim());
 	});
 
@@ -95,25 +99,33 @@ export function activate(context: vscode.ExtensionContext) {
 		}
 
 		// A test attack helps validate the multiplayer connection before editing code.
-		raidClient.sendCodeProgress(LINES_PER_ATTACK, 0);
+		raidClient.sendCodeProgress(LINES_PER_ATTACK, 0, 0);
 	});
 
 	const changeTracker = new ChangeTracker();
-	const trackerDisposable = changeTracker.start(({ linesAdded, linesRemoved }) => {
+	const trackerDisposable = changeTracker.start((progress) => {
 		if (!currentRaid || currentRaid.bossHp === 0) {
 			return;
 		}
 
-		pendingLines += linesAdded;
+		pendingCharacters += progress.charactersAdded;
+		while (pendingCharacters >= CHARACTERS_PER_DAMAGE) {
+			pendingCharacters -= CHARACTERS_PER_DAMAGE;
+			raidClient.sendCodeProgress(0, 0, CHARACTERS_PER_DAMAGE);
+		}
+
+		pendingLines += progress.linesAdded;
 		while (pendingLines >= LINES_PER_ATTACK && currentRaid.bossHp > 0) {
 			pendingLines -= LINES_PER_ATTACK;
-			raidClient.sendCodeProgress(LINES_PER_ATTACK, 0);
+			raidClient.sendCodeProgress(LINES_PER_ATTACK, 0, 0);
 		}
 
 		// Removals can contribute too, even if the player has not added ten new lines.
-		if (linesRemoved > 0) {
-			raidClient.sendCodeProgress(0, linesRemoved);
+		if (progress.linesRemoved > 0) {
+			raidClient.sendCodeProgress(0, progress.linesRemoved, 0);
 		}
+
+		updateBossUi();
 	});
 
 	updateBossUi();
