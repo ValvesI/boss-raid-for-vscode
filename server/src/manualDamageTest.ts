@@ -7,7 +7,7 @@ const roomManager = new RoomManager();
 const raid = roomManager.createRoom({
   id: "test-player",
   name: "Jogador de teste",
-}, { bossMaxHp: 1_000, damagePerPlayer: 1_000 });
+}, { bossMaxHp: 1_000 });
 
 console.log(`Boss criado com ${raid.bossHp} HP.`);
 

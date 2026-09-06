@@ -5,9 +5,10 @@ import { RoomManager } from "./rooms/roomManager.js";
 const roomManager = new RoomManager();
 const raid = roomManager.createRoom(
   { id: "ana", name: "Ana" },
-  { bossMaxHp: 1_000, damagePerPlayer: 500 },
+  { bossMaxHp: 1_000 },
 );
 roomManager.joinRoom(raid.roomCode, { id: "bruno", name: "Bruno" });
+assert.equal(raid.damagePerPlayer, 500);
 
 // Cada evento pede 200 de dano, mas Ana só pode somar 500 em toda a raid.
 roomManager.applyCodeProgress(raid.roomCode, "ana", { charactersAdded: 0, linesAdded: 50, linesRemoved: 0 });

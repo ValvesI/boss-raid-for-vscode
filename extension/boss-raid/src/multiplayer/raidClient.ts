@@ -11,7 +11,6 @@ export type Player = {
 
 export type RaidSettings = {
 	bossMaxHp: number;
-	damagePerPlayer: number;
 };
 
 export type RaidState = {
@@ -39,6 +38,7 @@ export type RaidClientHandlers = {
 	onRaidState: (raid: RaidState) => void;
 	onDamageApplied: (event: DamageAppliedEvent) => void;
 	onBossDefeated: (event: BossDefeatedEvent) => void;
+	onRaidLeft: () => void;
 	onError: (message: string) => void;
 };
 
@@ -81,6 +81,12 @@ export class RaidClient {
 	/** Pede ao servidor para aplicar somente o dano que ainda falta a este jogador. */
 	public markCompleted(): void {
 		this.emitWhenConnected("MARK_COMPLETED", {});
+	}
+
+	/** Sai da sala atual sem desconectar do servidor, permitindo entrar em outra. */
+	public leaveRaid(): void {
+		this.activeSession = undefined;
+		this.emitWhenConnected("LEAVE_RAID", {});
 	}
 
 	public dispose(): void {
@@ -129,6 +135,11 @@ export class RaidClient {
 
 		this.socket.on("BOSS_DEFEATED", (event: BossDefeatedEvent) => {
 			this.handlers.onBossDefeated(event);
+		});
+
+		this.socket.on("RAID_LEFT", () => {
+			this.activeSession = undefined;
+			this.handlers.onRaidLeft();
 		});
 
 		this.socket.on("ERROR", ({ message }: { message: string }) => {
