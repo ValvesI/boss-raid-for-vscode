@@ -4,7 +4,7 @@
   "description": "",
   "version": "0.0.1",
   "engines": {
-    "vscode": "^1.136.0"
+    "vscode": "^1.132.0"
   },
   "categories": [
     "Other"
@@ -13,19 +13,29 @@
   "main": "./out/extension.js",
   "contributes": {
     "commands": [
-  {
-    "command": "boss-raid.start",
-    "title": "Boss Raid: Iniciar Raid Local"
-  },
-  {
-    "command": "boss-raid.attack",
-    "title": "Boss Raid: Atacar Boss"
-  },
-  {
-    "command": "boss-raid.reset",
-    "title": "Boss Raid: Reiniciar Boss"
-  }
-]
+      {
+        "command": "boss-raid.start",
+        "title": "Boss Raid: Criar Raid"
+      },
+      {
+        "command": "boss-raid.join",
+        "title": "Boss Raid: Entrar em Raid"
+      },
+      {
+        "command": "boss-raid.attack",
+        "title": "Boss Raid: Enviar Ataque de Teste"
+      }
+    ],
+    "configuration": {
+      "title": "Boss Raid",
+      "properties": {
+        "bossRaid.serverUrl": {
+          "type": "string",
+          "default": "http://localhost:3000",
+          "description": "Endereço do servidor multiplayer da raid."
+        }
+      }
+    }
   },
   "scripts": {
     "vscode:prepublish": "npm run compile",
@@ -36,14 +46,17 @@
     "test": "vscode-test"
   },
   "devDependencies": {
-    "@types/vscode": "^1.136.0",
     "@types/mocha": "^10.0.10",
     "@types/node": "24.x",
-    "typescript-eslint": "^8.61.1",
+    "@types/vscode": "^1.136.0",
+    "@vscode/test-cli": "^0.0.15",
+    "@vscode/test-electron": "^3.0.0",
     "eslint": "^10.5.0",
     "typescript": "^6.0.3",
-    "@vscode/test-cli": "^0.0.15",
-    "@vscode/test-electron": "^3.0.0"
+    "typescript-eslint": "^8.61.1"
+  },
+  "dependencies": {
+    "socket.io-client": "^4.8.3"
   },
   "overrides": {
     "diff": "^8.0.4",
