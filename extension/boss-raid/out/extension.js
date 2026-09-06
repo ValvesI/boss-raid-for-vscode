@@ -39,13 +39,16 @@ const vscode = __importStar(require("vscode"));
 const changeTracker_1 = require("./editor/changeTracker");
 const localRaid_1 = require("./raid/localRaid");
 const DAMAGE_PER_ATTACK = 100;
+const DAMAGE_PER_CHARACTER = 1;
+const CHARACTERS_PER_DAMAGE = 5;
 const LINES_PER_ATTACK = 10;
 function activate(context) {
     const raid = new localRaid_1.LocalRaid();
+    let pendingCharacters = 0;
     let pendingLines = 0;
     const statusBar = vscode.window.createStatusBarItem(vscode.StatusBarAlignment.Left, 100);
     function updateBossUi() {
-        statusBar.text = `$(flame) Boss: ${raid.currentBossHp} / ${raid.bossMaxHp} HP`;
+        statusBar.text = `$(flame) Boss: ${raid.currentBossHp} / ${raid.bossMaxHp} HP · $(edit) ${pendingLines}/${LINES_PER_ATTACK} linhas · $(symbol-string) ${pendingCharacters}/${CHARACTERS_PER_DAMAGE} caracteres`;
         statusBar.tooltip = "Boss Raid";
         statusBar.show();
     }
@@ -58,12 +61,13 @@ function activate(context) {
         else if (result.isDefeated) {
             vscode.window.showInformationMessage("Boss derrotado! 🎉");
         }
-        else {
+        else if (message) {
             vscode.window.showInformationMessage(message);
         }
     }
     const startRaid = vscode.commands.registerCommand("boss-raid.start", () => {
         raid.start();
+        pendingCharacters = 0;
         pendingLines = 0;
         updateBossUi();
         vscode.window.showInformationMessage("A raid local começou!");
@@ -73,19 +77,28 @@ function activate(context) {
     });
     const resetBoss = vscode.commands.registerCommand("boss-raid.reset", () => {
         raid.start();
+        pendingCharacters = 0;
         pendingLines = 0;
         updateBossUi();
         vscode.window.showInformationMessage("Boss reiniciado.");
     });
     const changeTracker = new changeTracker_1.ChangeTracker();
-    const trackerDisposable = changeTracker.start((linesAdded) => {
+    const trackerDisposable = changeTracker.start((progress) => {
         if (raid.isDefeated) {
             return;
         }
-        pendingLines += linesAdded;
+        if (progress.charactersAdded > 0) {
+            pendingCharacters += progress.charactersAdded;
+            while (pendingCharacters >= CHARACTERS_PER_DAMAGE && !raid.isDefeated) {
+                pendingCharacters -= CHARACTERS_PER_DAMAGE;
+                applyDamage(DAMAGE_PER_CHARACTER);
+            }
+        }
+        pendingLines += progress.linesAdded + progress.linesRemoved;
+        updateBossUi();
         while (pendingLines >= LINES_PER_ATTACK && !raid.isDefeated) {
             pendingLines -= LINES_PER_ATTACK;
-            applyDamage(DAMAGE_PER_ATTACK, `${LINES_PER_ATTACK} linhas escritas: ${DAMAGE_PER_ATTACK} de dano!`);
+            applyDamage(DAMAGE_PER_ATTACK, `${LINES_PER_ATTACK} linhas alteradas: ${DAMAGE_PER_ATTACK} de dano!`);
         }
     });
     updateBossUi();

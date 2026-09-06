@@ -11,26 +11,74 @@ function shouldTrack(document: vscode.TextDocument): boolean {
 	return !pathParts.some((part) => IGNORED_FOLDERS.has(part));
 }
 
-function countNewLines(text: string): number {
-	return (text.match(/\r?\n/g) ?? []).length;
+export type CodeProgress = {
+	charactersAdded: number;
+	linesAdded: number;
+	linesRemoved: number;
+};
+
+function countAddedCharacters(text: string): number {
+	return Array.from(text).filter((character) => !/\s/.test(character)).length;
 }
 
-/** Observa linhas novas inseridas pelo usuário em arquivos do projeto. */
+function countNonEmptyLines(document: vscode.TextDocument): number {
+	let count = 0;
+
+	for (let lineIndex = 0; lineIndex < document.lineCount; lineIndex += 1) {
+		if (document.lineAt(lineIndex).text.trim().length > 0) {
+			count += 1;
+		}
+	}
+
+	return count;
+}
+
+/** Observa linhas inseridas e removidas pelo usuário em arquivos do projeto. */
 export class ChangeTracker {
-	public start(onLinesAdded: (linesAdded: number) => void): vscode.Disposable {
-		return vscode.workspace.onDidChangeTextDocument((event) => {
+	public start(onProgress: (progress: CodeProgress) => void): vscode.Disposable {
+		const nonEmptyLineCounts = new Map<string, number>();
+
+		function rememberDocument(document: vscode.TextDocument): void {
+			if (shouldTrack(document)) {
+				nonEmptyLineCounts.set(document.uri.toString(), countNonEmptyLines(document));
+			}
+		}
+
+		for (const document of vscode.workspace.textDocuments) {
+			rememberDocument(document);
+		}
+
+		const openDocumentDisposable = vscode.workspace.onDidOpenTextDocument(rememberDocument);
+		const changeDocumentDisposable = vscode.workspace.onDidChangeTextDocument((event) => {
 			if (!shouldTrack(event.document)) {
 				return;
 			}
 
-			const linesAdded = event.contentChanges.reduce(
-				(total, change) => total + countNewLines(change.text),
+			const documentKey = event.document.uri.toString();
+			const previousNonEmptyLines = nonEmptyLineCounts.get(documentKey) ?? 0;
+			const currentNonEmptyLines = countNonEmptyLines(event.document);
+			nonEmptyLineCounts.set(documentKey, currentNonEmptyLines);
+
+			const charactersAdded = event.contentChanges.reduce(
+				(total, change) => total + countAddedCharacters(change.text),
 				0,
 			);
+			const lineDifference = currentNonEmptyLines - previousNonEmptyLines;
+			const progress: CodeProgress = {
+				charactersAdded,
+				linesAdded: Math.max(0, lineDifference),
+				linesRemoved: Math.max(0, -lineDifference),
+			};
 
-			if (linesAdded > 0) {
-				onLinesAdded(linesAdded);
+			if (
+				progress.charactersAdded > 0 ||
+				progress.linesAdded > 0 ||
+				progress.linesRemoved > 0
+			) {
+				onProgress(progress);
 			}
 		});
+
+		return vscode.Disposable.from(openDocumentDisposable, changeDocumentDisposable);
 	}
 }
