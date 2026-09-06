@@ -10,6 +10,7 @@ const BOSS_MAX_HP = 1_000;
 export type DamageResult = {
   raid: RaidState;
   damage: number;
+  bossDefeated: boolean;
 };
 
 // Esta classe concentra as regras de armazenamento e busca de salas.
@@ -54,6 +55,29 @@ export class RoomManager {
   }
 
     /**
+   * Remove um jogador da raid.
+   * Se ele era o último participante, a sala inteira é removida da memória.
+   */
+  removePlayer(roomCode: string, playerId: string): RaidState | null {
+    const raid = this.getRoom(roomCode);
+
+    if (!raid) {
+      return null;
+    }
+
+    // filter cria uma nova lista sem o jogador cujo id corresponde ao desconectado.
+    raid.players = raid.players.filter((player) => player.id !== playerId);
+
+    // Uma sala vazia não precisa continuar ocupando memória no servidor.
+    if (raid.players.length === 0) {
+      this.rooms.delete(roomCode);
+      return null;
+    }
+
+    return raid;
+  }
+
+    /**
    * Aplica o progresso de código de um jogador à raid indicada.
    * Retorna null se a sala não existir.
    */
@@ -67,13 +91,23 @@ export class RoomManager {
       return null;
     }
 
-    // A calculadora converte linhas adicionadas/removidas em um número de dano.
-    const damage = calculateDamage(progress);
+    // Um boss já derrotado não recebe mais dano.
+    if (raid.bossHp === 0) {
+      return { raid, damage: 0, bossDefeated: false };
+    }
 
-    // Math.max evita que o HP fique negativo após o boss ser derrotado.
-    raid.bossHp = Math.max(0, raid.bossHp - damage);
+    // A calculadora informa o dano solicitado pelas linhas alteradas.
+    const requestedDamage = calculateDamage(progress);
 
-    return { raid, damage };
+    // No golpe final, o dano real não pode ser maior que o HP que restava.
+    const damage = Math.min(requestedDamage, raid.bossHp);
+
+    raid.bossHp -= damage;
+
+    // Só é uma derrota nova quando este ataque levou o HP até zero.
+    const bossDefeated = raid.bossHp === 0;
+
+    return { raid, damage, bossDefeated };
   }
 
   private generateRoomCode(): string {

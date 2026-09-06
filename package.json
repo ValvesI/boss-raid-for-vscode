@@ -7,7 +7,9 @@
     "dev": "tsx watch server/src/index.ts",
     "start": "tsx server/src/index.ts",
     "typecheck": "tsc --noEmit",
-    "test:rooms": "tsx server/src/manualRoomTest.ts"
+    "test:rooms": "tsx server/src/manualRoomTest.ts",
+    "test:damage": "tsx server/src/manualDamageTest.ts",
+    "test:boss-defeat": "tsx server/src/manualBossDefeatTest.ts"
   },
   "repository": {
     "type": "git",

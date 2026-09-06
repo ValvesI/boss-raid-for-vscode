@@ -18,18 +18,26 @@ let roomCode: string | undefined;
 let hostReceivedDamage = false;
 let guestReceivedDamage = false;
 let progressSent = false;
+let guestDisconnectedForTest = false;
 
 /**
  * O teste só é concluído quando os dois jogadores receberam o mesmo evento de dano.
  * Isso prova que a sincronização foi enviada para a sala inteira.
  */
-function finishTestIfReady(): void {
-  if (!hostReceivedDamage || !guestReceivedDamage) {
+/**
+ * Quando os dois jogadores recebem o dano, Bruno se desconecta.
+ * O próximo RAID_STATE recebido por Ana deve conter somente ela.
+ */
+function disconnectGuestAfterDamage(): void {
+    if (
+        !hostReceivedDamage ||
+        !guestReceivedDamage ||
+        guestDisconnectedForTest
+    ) {
     return;
-  }
-
-  console.log("Teste concluído: os dois jogadores receberam o dano.");
-  host.disconnect();
+    }
+  guestDisconnectedForTest = true;
+  console.log("Bruno vai se desconectar da raid.");
   guest.disconnect();
 }
 
@@ -43,15 +51,22 @@ host.on("RAID_STATE", ({ raid }: { raid: RaidState }) => {
     `Ana recebeu a raid ${raid.roomCode} com ${raid.players.length} jogador(es).`,
   );
 
-  // Na primeira atualização, somente Ana está na sala.
-  if (raid.players.length === 1) {
+    // Primeiro estado: somente Ana criou a sala.
+  if (raid.players.length === 1 && !guestDisconnectedForTest) {
     roomCode = raid.roomCode;
     guest.connect();
     return;
   }
 
+  // Último estado: Bruno saiu e Ana ficou sozinha na raid.
+  if (raid.players.length === 1 && guestDisconnectedForTest) {
+    console.log("Teste concluído: Bruno foi removido da lista de jogadores.");
+    host.disconnect();
+    return;
+  }
+
   // Quando Bruno entra, Ana envia progresso: 10 linhas x 4 de dano = 40 de dano.
-  if (raid.players.length === 2) {
+  if (raid.players.length === 2 && !progressSent) {
     progressSent = true;
     console.log("Ana enviou 10 linhas adicionadas para atacar o boss.");
     host.emit("CODE_PROGRESS", {
@@ -80,7 +95,7 @@ host.on("DAMAGE_APPLIED", (event: DamageAppliedEvent) => {
   );
 
   hostReceivedDamage = true;
-  finishTestIfReady();
+  disconnectGuestAfterDamage();
 });
 
 guest.on("DAMAGE_APPLIED", (event: DamageAppliedEvent) => {
@@ -89,7 +104,7 @@ guest.on("DAMAGE_APPLIED", (event: DamageAppliedEvent) => {
   );
 
   guestReceivedDamage = true;
-  finishTestIfReady();
+  disconnectGuestAfterDamage();
 });
 
 host.on("ERROR", ({ message }: { message: string }) => {
