@@ -2,16 +2,37 @@
   "name": "boss-raid",
   "displayName": "Boss Raid",
   "description": "",
-  "version": "0.0.1",
+  "version": "0.0.3",
   "engines": {
     "vscode": "^1.132.0"
   },
   "categories": [
     "Other"
   ],
-  "activationEvents": [],
+  "activationEvents": [
+    "onStartupFinished",
+    "onView:bossRaid.dashboard"
+  ],
   "main": "./out/extension.js",
   "contributes": {
+    "viewsContainers": {
+      "activitybar": [
+        {
+          "id": "bossRaid",
+          "title": "Boss Raid",
+          "icon": "resources/boss-raid.svg"
+        }
+      ]
+    },
+    "views": {
+      "bossRaid": [
+        {
+          "type": "webview",
+          "id": "bossRaid.dashboard",
+          "name": "Jogar"
+        }
+      ]
+    },
     "commands": [
       {
         "command": "boss-raid.start",
@@ -31,7 +52,7 @@
       "properties": {
         "bossRaid.serverUrl": {
           "type": "string",
-          "default": "http://192.168.0.119:3000",
+          "default": "https://boss-raid-for-vscode.onrender.com",
           "description": "Endereço do servidor multiplayer da raid."
         }
       }
@@ -48,7 +69,7 @@
   "devDependencies": {
     "@types/mocha": "^10.0.10",
     "@types/node": "24.x",
-    "@types/vscode": "^1.136.0",
+    "@types/vscode": "1.125.0",
     "@vscode/test-cli": "^0.0.15",
     "@vscode/test-electron": "^3.0.0",
     "eslint": "^10.5.0",

@@ -1,11 +1,16 @@
 // "import type" traz somente definições do TypeScript; não gera código no servidor.
-import type { Player, RaidState } from "../../../shared/protocol.js";
+import type { Player, RaidSettings, RaidState } from "../../../shared/protocol.js";
 import {
   calculateDamage,
   type CodeProgress,
 } from "../raids/damageCalculator.js";
 
-const BOSS_MAX_HP = 1_000;
+type NewPlayer = Omit<Player, "damageDealt" | "isCompleted">;
+
+const DEFAULT_SETTINGS: RaidSettings = {
+  bossMaxHp: 1_000,
+  damagePerPlayer: 500,
+};
 // Resultado devolvido depois que um evento de progresso afeta o boss.
 export type DamageResult = {
   raid: RaidState;
@@ -18,15 +23,16 @@ export class RoomManager {
   // Map funciona como uma tabela: cada código de sala aponta para uma RaidState.
   private readonly rooms = new Map<string, RaidState>();
 
-  createRoom(host: Player): RaidState {
+  createRoom(host: NewPlayer, settings: RaidSettings = DEFAULT_SETTINGS): RaidState {
     const roomCode = this.generateRoomCode();
 
     // O criador entra automaticamente como o primeiro participante.
     const raid: RaidState = {
       roomCode,
-      bossHp: BOSS_MAX_HP,
-      bossMaxHp: BOSS_MAX_HP,
-      players: [host],
+      bossMaxHp: settings.bossMaxHp,
+      bossHp: settings.bossMaxHp,
+      damagePerPlayer: settings.damagePerPlayer,
+      players: [{ ...host, damageDealt: 0, isCompleted: false }],
     };
 
     // Salva a raid usando o código como chave para que ela possa ser buscada depois.
@@ -35,7 +41,7 @@ export class RoomManager {
     return raid;
   }
 
-  joinRoom(roomCode: string, player: Player): RaidState | null {
+  joinRoom(roomCode: string, player: NewPlayer): RaidState | null {
     // get devolve undefined se não existir uma entrada com aquele código.
     const raid = this.rooms.get(roomCode);
 
@@ -44,7 +50,7 @@ export class RoomManager {
     }
 
     // push adiciona o jogador no fim da lista de participantes.
-    raid.players.push(player);
+    raid.players.push({ ...player, damageDealt: 0, isCompleted: false });
 
     return raid;
   }
@@ -83,6 +89,7 @@ export class RoomManager {
    */
   applyCodeProgress(
     roomCode: string,
+    playerId: string,
     progress: CodeProgress,
   ): DamageResult | null {
     const raid = this.getRoom(roomCode);
@@ -96,18 +103,45 @@ export class RoomManager {
       return { raid, damage: 0, bossDefeated: false };
     }
 
+    const player = raid.players.find((candidate) => candidate.id === playerId);
+    if (!player) {
+      return null;
+    }
+
     // A calculadora informa o dano solicitado pelas linhas alteradas.
     const requestedDamage = calculateDamage(progress);
 
+    // Cada pessoa só pode contribuir até o limite escolhido ao criar a raid.
+    const remainingPlayerDamage = Math.max(0, raid.damagePerPlayer - player.damageDealt);
+
     // No golpe final, o dano real não pode ser maior que o HP que restava.
-    const damage = Math.min(requestedDamage, raid.bossHp);
+    const damage = Math.min(requestedDamage, remainingPlayerDamage, raid.bossHp);
 
     raid.bossHp -= damage;
+    player.damageDealt += damage;
 
     // Só é uma derrota nova quando este ataque levou o HP até zero.
     const bossDefeated = raid.bossHp === 0;
 
     return { raid, damage, bossDefeated };
+  }
+
+  /** Marca o jogador como concluído e aplica toda a contribuição que faltava. */
+  markPlayerCompleted(roomCode: string, playerId: string): DamageResult | null {
+    const raid = this.getRoom(roomCode);
+    const player = raid?.players.find((candidate) => candidate.id === playerId);
+
+    if (!raid || !player || raid.bossHp === 0) {
+      return raid ? { raid, damage: 0, bossDefeated: false } : null;
+    }
+
+    const remainingPlayerDamage = Math.max(0, raid.damagePerPlayer - player.damageDealt);
+    const damage = Math.min(remainingPlayerDamage, raid.bossHp);
+    player.damageDealt += damage;
+    player.isCompleted = true;
+    raid.bossHp -= damage;
+
+    return { raid, damage, bossDefeated: raid.bossHp === 0 };
   }
 
   private generateRoomCode(): string {

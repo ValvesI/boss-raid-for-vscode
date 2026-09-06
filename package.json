@@ -9,7 +9,8 @@
     "typecheck": "tsc --noEmit",
     "test:rooms": "tsx server/src/manualRoomTest.ts",
     "test:damage": "tsx server/src/manualDamageTest.ts",
-    "test:boss-defeat": "tsx server/src/manualBossDefeatTest.ts"
+    "test:boss-defeat": "tsx server/src/manualBossDefeatTest.ts",
+    "test:contribution-limit": "tsx server/src/manualContributionLimitTest.ts"
   },
   "repository": {
     "type": "git",
