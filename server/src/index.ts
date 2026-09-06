@@ -2,6 +2,7 @@
 // entre o servidor e as extensões conectadas.
 import express from "express";
 import { createServer } from "node:http";
+import process from "node:process";
 import { Server } from "socket.io";
 import { RoomManager } from "./rooms/roomManager.js";
 import type { Player } from "../../shared/protocol.js";
@@ -21,7 +22,8 @@ const io = new Server(httpServer, {
 
 // Esta instância guarda as raids que existem enquanto o servidor está ligado.
 const roomManager = new RoomManager();
-const PORT = 3000;
+// Hosting platforms provide PORT at runtime; 3000 remains the local default.
+const PORT = Number(process.env.PORT) || 3000;
 
 // Rota simples para confirmar que o servidor HTTP está em execução.
 app.get("/health", (_request, response) => {
