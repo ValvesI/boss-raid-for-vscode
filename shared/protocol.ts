@@ -8,7 +8,6 @@ export type Player = {
 
 export type RaidSettings = {
   bossMaxHp: number;
-  damagePerPlayer: number;
 };
 
 export type RaidState = {
@@ -28,7 +27,8 @@ export type ClientMessage =
     linesAdded: number;
     linesRemoved: number;
   }
-  | { type: "MARK_COMPLETED" };
+  | { type: "MARK_COMPLETED" }
+  | { type: "LEAVE_RAID" };
 
 export type ServerMessage =
   | { type: "RAID_STATE"; raid: RaidState }
@@ -43,4 +43,5 @@ export type ServerMessage =
     type: "BOSS_DEFEATED";
     roomCode: string;
     defeatedBy: string;
-  };
+  }
+  | { type: "RAID_LEFT" };

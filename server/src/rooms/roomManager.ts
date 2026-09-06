@@ -9,7 +9,6 @@ type NewPlayer = Omit<Player, "damageDealt" | "isCompleted">;
 
 const DEFAULT_SETTINGS: RaidSettings = {
   bossMaxHp: 1_000,
-  damagePerPlayer: 500,
 };
 // Resultado devolvido depois que um evento de progresso afeta o boss.
 export type DamageResult = {
@@ -31,7 +30,7 @@ export class RoomManager {
       roomCode,
       bossMaxHp: settings.bossMaxHp,
       bossHp: settings.bossMaxHp,
-      damagePerPlayer: settings.damagePerPlayer,
+      damagePerPlayer: settings.bossMaxHp,
       players: [{ ...host, damageDealt: 0, isCompleted: false }],
     };
 
@@ -51,6 +50,7 @@ export class RoomManager {
 
     // push adiciona o jogador no fim da lista de participantes.
     raid.players.push({ ...player, damageDealt: 0, isCompleted: false });
+    this.updateDamageLimit(raid);
 
     return raid;
   }
@@ -108,6 +108,8 @@ export class RoomManager {
       return null;
     }
 
+    this.updateDamageLimit(raid);
+
     // A calculadora informa o dano solicitado pelas linhas alteradas.
     const requestedDamage = calculateDamage(progress);
 
@@ -155,5 +157,10 @@ export class RoomManager {
     }
 
     return code;
+  }
+
+  /** Divide a vida inicial entre as pessoas presentes; uma pessoa sozinha recebe 100%. */
+  private updateDamageLimit(raid: RaidState): void {
+    raid.damagePerPlayer = Math.ceil(raid.bossMaxHp / raid.players.length);
   }
 }

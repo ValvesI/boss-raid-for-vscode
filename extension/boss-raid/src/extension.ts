@@ -42,6 +42,13 @@ export function activate(context: vscode.ExtensionContext) {
 		.getConfiguration("bossRaid")
 		.get<string>("serverUrl", "https://boss-raid-for-vscode.onrender.com");
 
+	function clearCurrentRaid() {
+		currentRaid = undefined;
+		pendingLines = 0;
+		pendingCharacters = 0;
+		updateBossUi();
+	}
+
 	// O servidor é a fonte da verdade: a extensão apenas mostra o estado recebido.
 	const raidClient = new RaidClient(serverUrl, {
 		onConnectionChanged: (connected) => {
@@ -57,6 +64,10 @@ export function activate(context: vscode.ExtensionContext) {
 			// The server currently identifies the winner by a technical socket ID.
 			// The extension shows a friendly victory message until player profiles exist.
 			vscode.window.showInformationMessage("Boss derrotado! 🎉");
+		},
+		onRaidLeft: () => {
+			clearCurrentRaid();
+			vscode.window.showInformationMessage("Você saiu da raid.");
 		},
 		onError: (message) => vscode.window.showErrorMessage(message),
 	});
@@ -100,6 +111,10 @@ export function activate(context: vscode.ExtensionContext) {
 			return;
 		}
 		raidClient.markCompleted();
+	}, () => {
+		if (currentRaid) {
+			raidClient.leaveRaid();
+		}
 	});
 	const raidViewRegistration = vscode.window.registerWebviewViewProvider(
 		RaidViewProvider.viewType,
@@ -111,7 +126,7 @@ export function activate(context: vscode.ExtensionContext) {
 	const startRaid = vscode.commands.registerCommand("boss-raid.start", async () => {
 		const playerName = await askForPlayerName();
 		if (playerName) {
-			createRaid(playerName, { bossMaxHp: 1_000, damagePerPlayer: 500 });
+			createRaid(playerName, { bossMaxHp: 1_000 });
 		}
 	});
 

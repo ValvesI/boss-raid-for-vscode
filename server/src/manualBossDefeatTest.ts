@@ -38,10 +38,10 @@ function attackBoss(): void {
 
 socket.on("connect", () => {
   console.log("Jogador conectou e vai criar uma raid.");
-  // Este teste é solo, então seu limite individual precisa cobrir a vida toda do boss.
+  // Em uma raid solo, o teto automático cobre toda a vida do boss.
   socket.emit("CREATE_RAID", {
     playerName: "Testador",
-    settings: { bossMaxHp: 1_000, damagePerPlayer: 1_000 },
+    settings: { bossMaxHp: 1_000 },
   });
 });
 

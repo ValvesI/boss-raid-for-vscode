@@ -47,7 +47,7 @@ io.on("connection", (socket) => {
     // socket.id identifica esta conexão de forma única durante a sessão.
     const settings = validateSettings(data.settings);
     if (!settings) {
-      socket.emit("ERROR", { message: "A vida do boss e o dano por jogador devem ser números inteiros positivos." });
+      socket.emit("ERROR", { message: "A vida do boss deve ser um número inteiro positivo." });
       return;
     }
 
@@ -189,6 +189,24 @@ io.on("connection", (socket) => {
     }
   });
 
+  // Sair remove o jogador imediatamente, mas mantém a conexão aberta para criar outra raid.
+  socket.on("LEAVE_RAID", () => {
+    const roomCode = socket.data.roomCode as string | undefined;
+    if (!roomCode) {
+      socket.emit("RAID_LEFT");
+      return;
+    }
+
+    socket.leave(roomCode);
+    socket.data.roomCode = undefined;
+    const raid = roomManager.removePlayer(roomCode, socket.id);
+    socket.emit("RAID_LEFT");
+
+    if (raid) {
+      io.to(roomCode).emit("RAID_STATE", { raid });
+    }
+  });
+
     socket.on("disconnect", () => {
     // O código foi guardado quando o jogador criou ou entrou na sala.
     const roomCode = socket.data.roomCode as string | undefined;
@@ -219,10 +237,9 @@ httpServer.listen(PORT, "0.0.0.0", () => {
 /** Aceita números seguros para impedir que uma configuração malformada afete a sala. */
 function validateSettings(settings?: RaidSettings): RaidSettings | null {
   const bossMaxHp = settings?.bossMaxHp ?? 1_000;
-  const damagePerPlayer = settings?.damagePerPlayer ?? 500;
   const isValid = (value: number) => Number.isInteger(value) && value > 0 && value <= 1_000_000;
 
-  return isValid(bossMaxHp) && isValid(damagePerPlayer)
-    ? { bossMaxHp, damagePerPlayer }
+  return isValid(bossMaxHp)
+    ? { bossMaxHp }
     : null;
 }
