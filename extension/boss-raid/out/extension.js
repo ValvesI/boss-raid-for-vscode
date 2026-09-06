@@ -37,59 +37,105 @@ exports.activate = activate;
 exports.deactivate = deactivate;
 const vscode = __importStar(require("vscode"));
 const changeTracker_1 = require("./editor/changeTracker");
-const localRaid_1 = require("./raid/localRaid");
-const DAMAGE_PER_ATTACK = 100;
+const raidClient_1 = require("./multiplayer/raidClient");
 const LINES_PER_ATTACK = 10;
 function activate(context) {
-    const raid = new localRaid_1.LocalRaid();
     let pendingLines = 0;
+    let currentRaid;
+    let isConnected = false;
     const statusBar = vscode.window.createStatusBarItem(vscode.StatusBarAlignment.Left, 100);
     function updateBossUi() {
-        statusBar.text = `$(flame) Boss: ${raid.currentBossHp} / ${raid.bossMaxHp} HP`;
-        statusBar.tooltip = "Boss Raid";
-        statusBar.show();
-    }
-    function applyDamage(damage, message) {
-        const result = raid.attack(damage);
-        updateBossUi();
-        if (result.damage === 0) {
-            vscode.window.showInformationMessage("O boss já foi derrotado!");
+        if (currentRaid) {
+            statusBar.text = `$(flame) Boss [${currentRaid.roomCode}]: ${currentRaid.bossHp} / ${currentRaid.bossMaxHp} HP | $(person) ${currentRaid.players.length}`;
+            statusBar.tooltip = `Raid ${currentRaid.roomCode}`;
         }
-        else if (result.isDefeated) {
-            vscode.window.showInformationMessage("Boss derrotado! 🎉");
+        else if (isConnected) {
+            statusBar.text = "$(radio-tower) Boss Raid: conectado — crie ou entre em uma raid";
+            statusBar.tooltip = "Conectado ao servidor da raid";
         }
         else {
-            vscode.window.showInformationMessage(message);
+            statusBar.text = "$(debug-disconnect) Boss Raid: desconectado";
+            statusBar.tooltip = "Inicie ou entre em uma raid para conectar";
         }
+        statusBar.show();
     }
-    const startRaid = vscode.commands.registerCommand("boss-raid.start", () => {
-        raid.start();
+    const serverUrl = vscode.workspace
+        .getConfiguration("bossRaid")
+        .get("serverUrl", "http://localhost:3000");
+    // The server is authoritative: this extension only displays state it receives.
+    const raidClient = new raidClient_1.RaidClient(serverUrl, {
+        onConnectionChanged: (connected) => {
+            isConnected = connected;
+            updateBossUi();
+        },
+        onRaidState: (raid) => {
+            currentRaid = raid;
+            updateBossUi();
+        },
+        onDamageApplied: () => updateBossUi(),
+        onBossDefeated: () => {
+            // The server currently identifies the winner by a technical socket ID.
+            // The extension shows a friendly victory message until player profiles exist.
+            vscode.window.showInformationMessage("Boss derrotado! 🎉");
+        },
+        onError: (message) => vscode.window.showErrorMessage(message),
+    });
+    async function askForPlayerName() {
+        return vscode.window.showInputBox({
+            prompt: "Qual é o seu nome na raid?",
+            placeHolder: "Ex.: Ana",
+            ignoreFocusOut: true,
+        });
+    }
+    const startRaid = vscode.commands.registerCommand("boss-raid.start", async () => {
+        const playerName = await askForPlayerName();
+        if (!playerName?.trim()) {
+            return;
+        }
         pendingLines = 0;
-        updateBossUi();
-        vscode.window.showInformationMessage("A raid local começou!");
+        raidClient.createRaid(playerName.trim());
+    });
+    const joinRaid = vscode.commands.registerCommand("boss-raid.join", async () => {
+        const playerName = await askForPlayerName();
+        if (!playerName?.trim()) {
+            return;
+        }
+        const roomCode = await vscode.window.showInputBox({
+            prompt: "Digite o código da raid",
+            placeHolder: "Ex.: 85WZXH",
+            ignoreFocusOut: true,
+        });
+        if (!roomCode?.trim()) {
+            return;
+        }
+        pendingLines = 0;
+        raidClient.joinRaid(roomCode.trim().toUpperCase(), playerName.trim());
     });
     const attackBoss = vscode.commands.registerCommand("boss-raid.attack", () => {
-        applyDamage(DAMAGE_PER_ATTACK, `Você causou ${DAMAGE_PER_ATTACK} de dano.`);
-    });
-    const resetBoss = vscode.commands.registerCommand("boss-raid.reset", () => {
-        raid.start();
-        pendingLines = 0;
-        updateBossUi();
-        vscode.window.showInformationMessage("Boss reiniciado.");
+        if (!currentRaid) {
+            vscode.window.showWarningMessage("Crie ou entre em uma raid primeiro.");
+            return;
+        }
+        // A test attack helps validate the multiplayer connection before editing code.
+        raidClient.sendCodeProgress(LINES_PER_ATTACK, 0);
     });
     const changeTracker = new changeTracker_1.ChangeTracker();
-    const trackerDisposable = changeTracker.start((linesAdded) => {
-        if (raid.isDefeated) {
+    const trackerDisposable = changeTracker.start(({ linesAdded, linesRemoved }) => {
+        if (!currentRaid || currentRaid.bossHp === 0) {
             return;
         }
         pendingLines += linesAdded;
-        while (pendingLines >= LINES_PER_ATTACK && !raid.isDefeated) {
+        while (pendingLines >= LINES_PER_ATTACK && currentRaid.bossHp > 0) {
             pendingLines -= LINES_PER_ATTACK;
-            applyDamage(DAMAGE_PER_ATTACK, `${LINES_PER_ATTACK} linhas escritas: ${DAMAGE_PER_ATTACK} de dano!`);
+            raidClient.sendCodeProgress(LINES_PER_ATTACK, 0);
+        }
+        // Removals can contribute too, even if the player has not added ten new lines.
+        if (linesRemoved > 0) {
+            raidClient.sendCodeProgress(0, linesRemoved);
         }
     });
     updateBossUi();
-    context.subscriptions.push(statusBar, startRaid, attackBoss, resetBoss, trackerDisposable);
+    context.subscriptions.push(statusBar, startRaid, joinRaid, attackBoss, trackerDisposable, { dispose: () => raidClient.dispose() });
 }
 function deactivate() { }
 //# sourceMappingURL=extension.js.map

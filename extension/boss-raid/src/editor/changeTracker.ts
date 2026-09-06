@@ -15,21 +15,30 @@ function countNewLines(text: string): number {
 	return (text.match(/\r?\n/g) ?? []).length;
 }
 
-/** Observa linhas novas inseridas pelo usuário em arquivos do projeto. */
+export type CodeProgress = {
+	linesAdded: number;
+	linesRemoved: number;
+};
+
+/** Observa linhas inseridas e removidas pelo usuário em arquivos do projeto. */
 export class ChangeTracker {
-	public start(onLinesAdded: (linesAdded: number) => void): vscode.Disposable {
+	public start(onProgress: (progress: CodeProgress) => void): vscode.Disposable {
 		return vscode.workspace.onDidChangeTextDocument((event) => {
 			if (!shouldTrack(event.document)) {
 				return;
 			}
 
-			const linesAdded = event.contentChanges.reduce(
-				(total, change) => total + countNewLines(change.text),
-				0,
+			const progress = event.contentChanges.reduce<CodeProgress>(
+				(total, change) => ({
+					linesAdded: total.linesAdded + countNewLines(change.text),
+					// The changed range belongs to the document before this edit.
+					linesRemoved: total.linesRemoved + change.range.end.line - change.range.start.line,
+				}),
+				{ linesAdded: 0, linesRemoved: 0 },
 			);
 
-			if (linesAdded > 0) {
-				onLinesAdded(linesAdded);
+			if (progress.linesAdded > 0 || progress.linesRemoved > 0) {
+				onProgress(progress);
 			}
 		});
 	}
