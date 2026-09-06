@@ -23,4 +23,9 @@ export type ServerMessage =
       damage: number;
       bossHp: number;
     }
-  | { type: "ERROR"; message: string };
+  | { type: "ERROR"; message: string }
+  | {
+    type: "BOSS_DEFEATED";
+    roomCode: string;
+    defeatedBy: string;
+  };

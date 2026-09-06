@@ -134,6 +134,16 @@ io.on("connection", (socket) => {
       // Envia também o estado completo para manter todos sincronizados.
       io.to(roomCode).emit("RAID_STATE", { raid: result.raid });
 
+        // Este evento acontece uma única vez: no golpe que derrota o boss.
+      if (result.bossDefeated) {
+        io.to(roomCode).emit("BOSS_DEFEATED", {
+          roomCode,
+          defeatedBy: socket.id,
+        });
+
+        console.log(`Boss da sala ${roomCode} foi derrotado.`);
+      }
+
       console.log(
         `${socket.id} causou ${result.damage} de dano na sala ${roomCode}.`,
       );

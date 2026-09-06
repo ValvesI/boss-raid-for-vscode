@@ -38,6 +38,7 @@ const finalHit = roomManager.applyCodeProgress(raid.roomCode, {
 });
 
 assert.equal(finalHit?.damage, 80);
+assert.equal(finalHit?.bossDefeated, true);
 assert.equal(raid.bossHp, 0);
 console.log(`Golpe final aplicou ${finalHit?.damage} de dano. Boss derrotado.`);
 
@@ -48,6 +49,7 @@ const extraHit = roomManager.applyCodeProgress(raid.roomCode, {
 });
 
 assert.equal(extraHit?.damage, 0);
+assert.equal(extraHit?.bossDefeated, false);
 assert.equal(raid.bossHp, 0);
 
 console.log("Teste concluído: o boss não recebeu dano após ser derrotado.");

@@ -10,6 +10,7 @@ const BOSS_MAX_HP = 1_000;
 export type DamageResult = {
   raid: RaidState;
   damage: number;
+  bossDefeated: boolean;
 };
 
 // Esta classe concentra as regras de armazenamento e busca de salas.
@@ -92,7 +93,7 @@ export class RoomManager {
 
     // Um boss já derrotado não recebe mais dano.
     if (raid.bossHp === 0) {
-      return { raid, damage: 0 };
+      return { raid, damage: 0, bossDefeated: false };
     }
 
     // A calculadora informa o dano solicitado pelas linhas alteradas.
@@ -103,7 +104,10 @@ export class RoomManager {
 
     raid.bossHp -= damage;
 
-    return { raid, damage };
+    // Só é uma derrota nova quando este ataque levou o HP até zero.
+    const bossDefeated = raid.bossHp === 0;
+
+    return { raid, damage, bossDefeated };
   }
 
   private generateRoomCode(): string {
