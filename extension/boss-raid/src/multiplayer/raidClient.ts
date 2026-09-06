@@ -11,6 +11,7 @@ export type Player = {
 
 export type RaidSettings = {
 	bossMaxHp: number;
+	timeLimitSeconds?: number | undefined;
 };
 
 export type RaidState = {
@@ -18,6 +19,8 @@ export type RaidState = {
 	bossHp: number;
 	bossMaxHp: number;
 	damagePerPlayer: number;
+	endsAt?: number | undefined;
+	outcome: "active" | "boss-defeated" | "boss-won";
 	players: Player[];
 };
 
@@ -38,6 +41,7 @@ export type RaidClientHandlers = {
 	onRaidState: (raid: RaidState) => void;
 	onDamageApplied: (event: DamageAppliedEvent) => void;
 	onBossDefeated: (event: BossDefeatedEvent) => void;
+	onRaidLost: () => void;
 	onRaidLeft: () => void;
 	onError: (message: string) => void;
 };
@@ -136,6 +140,8 @@ export class RaidClient {
 		this.socket.on("BOSS_DEFEATED", (event: BossDefeatedEvent) => {
 			this.handlers.onBossDefeated(event);
 		});
+
+		this.socket.on("RAID_LOST", () => this.handlers.onRaidLost());
 
 		this.socket.on("RAID_LEFT", () => {
 			this.activeSession = undefined;

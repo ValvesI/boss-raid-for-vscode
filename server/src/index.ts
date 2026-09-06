@@ -22,6 +22,8 @@ const io = new Server(httpServer, {
 
 // Esta instância guarda as raids que existem enquanto o servidor está ligado.
 const roomManager = new RoomManager();
+// Um cronômetro por sala; o servidor, e não a extensão, decide quem venceu.
+const roomTimers = new Map<string, NodeJS.Timeout>();
 // Hosting platforms provide PORT at runtime; 3000 remains the local default.
 const PORT = Number(process.env.PORT) || 3000;
 
@@ -63,6 +65,7 @@ io.on("connection", (socket) => {
     // Guardamos a sala na própria conexão para não confiar em um código enviado a cada dano.
     socket.data.roomCode = raid.roomCode;
     socket.emit("RAID_STATE", { raid });
+    scheduleRoomTimer(raid.roomCode, raid.endsAt);
 
     console.log(`${player.name} criou a sala ${raid.roomCode}`);
   });
@@ -149,6 +152,7 @@ io.on("connection", (socket) => {
 
         // Este evento acontece uma única vez: no golpe que derrota o boss.
       if (result.bossDefeated) {
+        clearRoomTimer(roomCode);
         io.to(roomCode).emit("BOSS_DEFEATED", {
           roomCode,
           defeatedBy: socket.id,
@@ -185,6 +189,7 @@ io.on("connection", (socket) => {
     io.to(roomCode).emit("RAID_STATE", { raid: result.raid });
 
     if (result.bossDefeated) {
+      clearRoomTimer(roomCode);
       io.to(roomCode).emit("BOSS_DEFEATED", { roomCode, defeatedBy: socket.id });
     }
   });
@@ -204,6 +209,8 @@ io.on("connection", (socket) => {
 
     if (raid) {
       io.to(roomCode).emit("RAID_STATE", { raid });
+    } else {
+      clearRoomTimer(roomCode);
     }
   });
 
@@ -225,6 +232,8 @@ io.on("connection", (socket) => {
       return;
     }
 
+    clearRoomTimer(roomCode);
+
     console.log(`Sala ${roomCode} foi encerrada porque ficou vazia.`);
   });
 });
@@ -237,9 +246,34 @@ httpServer.listen(PORT, "0.0.0.0", () => {
 /** Aceita números seguros para impedir que uma configuração malformada afete a sala. */
 function validateSettings(settings?: RaidSettings): RaidSettings | null {
   const bossMaxHp = settings?.bossMaxHp ?? 1_000;
+  const timeLimitSeconds = settings?.timeLimitSeconds;
   const isValid = (value: number) => Number.isInteger(value) && value > 0 && value <= 1_000_000;
 
-  return isValid(bossMaxHp)
-    ? { bossMaxHp }
+  const validTimer = timeLimitSeconds === undefined
+    || (Number.isInteger(timeLimitSeconds) && timeLimitSeconds >= 60 && timeLimitSeconds <= 86_400);
+
+  return isValid(bossMaxHp) && validTimer
+    ? { bossMaxHp, timeLimitSeconds }
     : null;
+}
+
+function scheduleRoomTimer(roomCode: string, endsAt: number | undefined): void {
+  clearRoomTimer(roomCode);
+  if (!endsAt) return;
+
+  const delay = Math.max(0, endsAt - Date.now());
+  roomTimers.set(roomCode, setTimeout(() => {
+    roomTimers.delete(roomCode);
+    const raid = roomManager.markBossWon(roomCode);
+    if (!raid) return;
+
+    io.to(roomCode).emit("RAID_STATE", { raid });
+    io.to(roomCode).emit("RAID_LOST", { roomCode });
+  }, delay));
+}
+
+function clearRoomTimer(roomCode: string): void {
+  const timer = roomTimers.get(roomCode);
+  if (timer) clearTimeout(timer);
+  roomTimers.delete(roomCode);
 }
