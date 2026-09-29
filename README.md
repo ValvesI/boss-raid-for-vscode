@@ -1,2 +1,2 @@
 # boss-raid-for-vscode
-The name says everything
+A simple boss raid system for vscode based on damaged dealt by typing.
